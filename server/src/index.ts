@@ -5,317 +5,110 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import axios, { AxiosInstance, AxiosResponse } from "axios";
+import axios, { AxiosInstance } from "axios";
 import * as dotenv from "dotenv";
-import NodeCache from "node-cache";
-import picocolors from "picocolors";
-import { RateLimiterMemory, RateLimiterRes } from "rate-limiter-flexible";
-
-import { logo } from "./logo";
 
 dotenv.config();
 
-interface AuthConfig {
-  type: "bearer" | "apikey" | "oauth2";
-  token?: string;
-  apiKey?: string;
-  clientId?: string;
-  clientSecret?: string;
-  tokenUrl?: string;
-}
-
-interface RateLimitConfig {
-  points: number; // Number of requests
-  duration: number; // Time window in seconds
-  blockDuration: number; // Block duration in seconds after limit exceeded
-}
-
-// Custom error type for rate limiting
-class RateLimitError extends Error {
-  constructor(
-    message: string,
-    public remainingPoints: number,
-    public msBeforeNext: number,
-    public totalHits: number
-  ) {
-    super(message);
-    this.name = "RateLimitError";
-  }
-}
-
-class AuthenticatedAPIClient {
+class DockerInsightsAPIClient {
   private axiosInstance: AxiosInstance;
-  private authConfig: AuthConfig;
+  private token: string;
   private baseURL: string;
-  private rateLimiter: RateLimiterMemory;
-  private cache: NodeCache;
 
-  constructor(
-    baseURL: string,
-    authConfig: AuthConfig,
-    rateLimitConfig?: RateLimitConfig
-  ) {
-    this.baseURL = baseURL;
-    this.authConfig = authConfig;
+  constructor() {
+    this.token = process.env.BEARER_TOKEN || "";
+    this.baseURL = process.env.DOCKER_INSIGHTS_API_HOST || "https://api.docker.com";
 
-    // Initialize rate limiter
-    const defaultRateLimit = {
-      points: parseInt(process.env.RATE_LIMIT_POINTS || "100"),
-      duration: parseInt(process.env.RATE_LIMIT_DURATION || "60"),
-      blockDuration: parseInt(process.env.RATE_LIMIT_BLOCK_DURATION || "60"),
-    };
-
-    this.rateLimiter = new RateLimiterMemory({
-      keyPrefix: "api_calls",
-      points: rateLimitConfig?.points || defaultRateLimit.points,
-      duration: rateLimitConfig?.duration || defaultRateLimit.duration,
-      blockDuration:
-        rateLimitConfig?.blockDuration || defaultRateLimit.blockDuration,
-    });
-
-    // Initialize cache
-    this.cache = new NodeCache({
-      stdTTL: parseInt(process.env.CACHE_TTL || "300"), // 5 minutes default
-      checkperiod: 60, // Check for expired keys every 60 seconds
-    });
+    // Add validation
+    if (!this.token) {
+      console.error("Warning: BEARER_TOKEN environment variable not set");
+    }
+    if (!this.baseURL) {
+      console.error("Warning: DOCKER_INSIGHTS_API_HOST environment variable not set");
+    }
 
     this.axiosInstance = axios.create({
-      baseURL,
+      baseURL: this.baseURL,
       timeout: 30000,
       headers: {
         "Content-Type": "application/json",
-        "User-Agent": "cagent-mcp-server/1.0",
+        Authorization: `Bearer ${this.token}`,
+        "User-Agent": "docker-insights-agent/1.0",
       },
     });
-
-    this.setupAuthInterceptor();
   }
 
-  private setupAuthInterceptor() {
-    this.axiosInstance.interceptors.request.use(
-      async (config) => {
-        await this.addAuthHeaders(config);
-        return config;
-      },
-      (error) => Promise.reject(error)
-    );
+  async getDesktopMetric(metric: string, timespan: string = "3m"): Promise<any> {
+    const validMetrics = ["users", "images", "extensions", "builds", "runs", "usage"];
 
-    this.axiosInstance.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        if (error.response?.status === 401) {
-          if (this.authConfig.type === "oauth2") {
-            await this.refreshOAuth2Token();
-            return this.axiosInstance.request(error.config);
-          }
-        }
-        return Promise.reject(error);
-      }
-    );
-  }
-
-  private async addAuthHeaders(config: any) {
-    switch (this.authConfig.type) {
-      case "bearer":
-        if (this.authConfig.token) {
-          config.headers["Authorization"] = `Bearer ${this.authConfig.token}`;
-        }
-        break;
-      case "apikey":
-        if (this.authConfig.apiKey) {
-          config.headers["X-API-Key"] = this.authConfig.apiKey;
-        }
-        break;
-      case "oauth2":
-        const token = await this.getOAuth2Token();
-        if (token) {
-          config.headers["Authorization"] = `Bearer ${token}`;
-        }
-        break;
+    if (!validMetrics.includes(metric)) {
+      throw new Error(
+        `Invalid metric: ${metric}. Valid metrics are: ${validMetrics.join(", ")}`
+      );
     }
-  }
 
-  private async getOAuth2Token(): Promise<string | null> {
-    return process.env.OAUTH2_ACCESS_TOKEN || null;
-  }
-
-  private async refreshOAuth2Token(): Promise<void> {
-    if (
-      !this.authConfig.tokenUrl ||
-      !this.authConfig.clientId ||
-      !this.authConfig.clientSecret
-    ) {
-      throw new Error("OAuth2 configuration incomplete");
-    }
+    const endpoint = `/v2/admin-insights/orgs/docker/desktop/${metric}/summary?timespan=${timespan}`;
 
     try {
-      const response = await axios.post(this.authConfig.tokenUrl, {
-        grant_type: "client_credentials",
-        client_id: this.authConfig.clientId,
-        client_secret: this.authConfig.clientSecret,
-      });
+      const response = await this.axiosInstance.get(endpoint);
 
-      process.env.OAUTH2_ACCESS_TOKEN = response.data.access_token;
-    } catch (error) {
-      throw new Error(`OAuth2 token refresh failed: ${error}`);
-    }
-  }
-
-  private generateCacheKey(
-    method: string,
-    endpoint: string,
-    data?: any
-  ): string {
-    const dataHash = data ? JSON.stringify(data) : "";
-    return `${method}:${endpoint}:${dataHash}`;
-  }
-
-  async makeRequest(
-    method: string,
-    endpoint: string,
-    data?: any,
-    useCache = true
-  ): Promise<any> {
-    const requestKey = `${this.baseURL}:${endpoint}`;
-
-    try {
-      // Check rate limit
-      await this.rateLimiter.consume(requestKey);
-
-      // Check cache for GET requests
-      if (useCache && method.toUpperCase() === "GET") {
-        const cacheKey = this.generateCacheKey(method, endpoint, data);
-        const cachedResult = this.cache.get(cacheKey);
-        if (cachedResult) {
-          return {
-            ...cachedResult,
-            cached: true,
-            timestamp: new Date().toISOString(),
-          };
-        }
-      }
-
-      // Make the actual request
-      const response: AxiosResponse = await this.axiosInstance.request({
-        method: method.toUpperCase(),
-        url: endpoint,
-        data,
-      });
-
-      const result = {
+      return {
         status: response.status,
-        headers: response.headers,
+        metric,
+        timespan,
         data: response.data,
-        cached: false,
         timestamp: new Date().toISOString(),
+        success: true,
       };
-
-      // Cache successful GET requests
-      if (
-        useCache &&
-        method.toUpperCase() === "GET" &&
-        response.status === 200
-      ) {
-        const cacheKey = this.generateCacheKey(method, endpoint, data);
-        this.cache.set(cacheKey, result);
-      }
-
-      return result;
-    } catch (error: unknown) {
-      // Handle rate limit errors
-      if (error && typeof error === "object" && "remainingPoints" in error) {
-        const rateLimitError = error as any; // Type assertion for rate limiter error
-        const resetTime = new Date(Date.now() + rateLimitError.msBeforeNext);
-        return {
-          status: 429,
-          error: "Rate limit exceeded",
-          message: `Rate limit exceeded. Try again at ${resetTime.toISOString()}`,
-          retryAfter: rateLimitError.msBeforeNext,
-          remainingPoints: rateLimitError.remainingPoints,
-        };
-      }
-
-      // Handle Axios errors
-      if (axios.isAxiosError(error) && error.response) {
+    } catch (error: any) {
+      if (error.response) {
         return {
           status: error.response.status,
+          metric,
+          timespan,
           error: error.response.data,
           message: `API call failed: ${error.response.status} ${error.response.statusText}`,
+          timestamp: new Date().toISOString(),
+          success: false,
         };
       }
-
-      // Handle other errors
       throw error;
     }
   }
 
-  async getRateLimitStatus(): Promise<any> {
-    const requestKey = `${this.baseURL}:status`;
+  async getAllDesktopMetrics(timespan: string = "3m"): Promise<any> {
+    const metrics = ["users", "images", "extensions", "builds", "runs", "usage"];
+    const results: any = {
+      timespan,
+      timestamp: new Date().toISOString(),
+      metrics: {},
+    };
 
-    // Get rate limit info without making an actual request
-    const rateLimiterInfo = this.rateLimiter.points;
-
-    try {
-      const res: RateLimiterRes | null = await this.rateLimiter.get(requestKey);
-
-      return {
-        remainingPoints: res ? res.remainingPoints : rateLimiterInfo,
-        msBeforeNext: res ? res.msBeforeNext : 0,
-        totalHits: res ? rateLimiterInfo - res.remainingPoints : 0,
-        maxPoints: rateLimiterInfo,
-        resetTime: res
-          ? new Date(Date.now() + res.msBeforeNext).toISOString()
-          : null,
-      };
-    } catch (error) {
-      // Return default values immediately if there's an error
-      return {
-        remainingPoints: rateLimiterInfo,
-        msBeforeNext: 0,
-        totalHits: 0,
-        maxPoints: rateLimiterInfo,
-        resetTime: null,
-      };
+    // Get all metrics sequentially to avoid rate limiting
+    for (const metric of metrics) {
+      try {
+        const result = await this.getDesktopMetric(metric, timespan);
+        results.metrics[metric] = result;
+      } catch (error) {
+        results.metrics[metric] = {
+          error: error instanceof Error ? error.message : String(error),
+          timestamp: new Date().toISOString(),
+          success: false,
+        };
+      }
     }
-  }
 
-  clearCache(pattern?: string): number {
-    if (pattern) {
-      const keys = this.cache.keys();
-      const matchingKeys = keys.filter((key) => key.includes(pattern));
-      let deletedCount = 0;
-      matchingKeys.forEach((key) => {
-        if (this.cache.del(key)) deletedCount++;
-      });
-      return deletedCount;
-    } else {
-      this.cache.flushAll();
-      return -1; // Indicate all cache cleared
-    }
+    return results;
   }
 }
 
 // Initialize the API client
-const authConfig: AuthConfig = {
-  type: (process.env.AUTH_TYPE as "bearer" | "apikey" | "oauth2") || "bearer",
-  token: process.env.DOCKER_ACCESS_TOKEN || process.env.API_TOKEN,
-  apiKey: process.env.API_KEY,
-  clientId: process.env.CLIENT_ID,
-  clientSecret: process.env.CLIENT_SECRET,
-  tokenUrl: process.env.TOKEN_URL,
-};
-if (!process.env.DOCKER_HUB_ORIGIN) {
-  throw new Error("DOCKER_HUB_ORIGIN is not set");
-}
-const apiClient = new AuthenticatedAPIClient(
-  process.env.DOCKER_HUB_ORIGIN,
-  authConfig
-);
+const apiClient = new DockerInsightsAPIClient();
 
 // Create MCP server
 const server = new Server(
   {
-    name: "authenticated-api-server",
+    name: "docker-insights-api-server",
     version: "1.0.0",
   },
   {
@@ -328,60 +121,35 @@ const server = new Server(
 // Define available tools
 const tools: Tool[] = [
   {
-    name: "api_call",
-    description: "Make authenticated API calls with rate limiting and caching",
+    name: "get_desktop_metric",
+    description: "Get a specific Docker Desktop metric",
     inputSchema: {
       type: "object",
       properties: {
-        method: {
+        metric: {
           type: "string",
-          enum: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-          description: "HTTP method",
+          enum: ["users", "images", "extensions", "builds", "runs", "usage"],
+          description: "The metric to retrieve",
         },
-        endpoint: {
+        timespan: {
           type: "string",
-          description: "API endpoint (e.g., /users, /orders/123)",
-        },
-        data: {
-          type: "object",
-          description: "Request payload for POST/PUT/PATCH requests",
-        },
-        useCache: {
-          type: "boolean",
-          description:
-            "Whether to use caching for GET requests (default: true)",
-          default: true,
+          description: "Time span for the metric (default: 3m)",
+          default: "3m",
         },
       },
-      required: ["method", "endpoint"],
+      required: ["metric"],
     },
   },
   {
-    name: "validate_auth",
-    description: "Validate current authentication status",
-    inputSchema: {
-      type: "object",
-      properties: {},
-    },
-  },
-  {
-    name: "rate_limit_status",
-    description: "Check current rate limit status",
-    inputSchema: {
-      type: "object",
-      properties: {},
-    },
-  },
-  {
-    name: "clear_cache",
-    description: "Clear cached responses",
+    name: "get_all_desktop_metrics",
+    description: "Get all Docker Desktop metrics for the dashboard",
     inputSchema: {
       type: "object",
       properties: {
-        pattern: {
+        timespan: {
           type: "string",
-          description:
-            "Optional pattern to match cache keys (clears all if not provided)",
+          description: "Time span for all metrics (default: 3m)",
+          default: "3m",
         },
       },
     },
@@ -390,34 +158,24 @@ const tools: Tool[] = [
 
 // Handle tool listing
 server.setRequestHandler(ListToolsRequestSchema, async () => {
+  console.error("Tools requested:", tools.map(t => t.name)); // Debug logging
   return { tools };
 });
 
 // Handle tool calls
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
   const { name, arguments: args } = request.params;
+  console.error(`Tool called: ${name}`, args); // Debug logging
 
   try {
     switch (name) {
-      case "api_call":
-        const {
-          method,
-          endpoint,
-          data,
-          useCache = true,
-        } = args as {
-          method: string;
-          endpoint: string;
-          data?: any;
-          useCache?: boolean;
+      case "get_desktop_metric":
+        const { metric, timespan = "3m" } = args as {
+          metric: string;
+          timespan?: string;
         };
 
-        const result = await apiClient.makeRequest(
-          method,
-          endpoint,
-          data,
-          useCache
-        );
+        const result = await apiClient.getDesktopMetric(metric, timespan);
 
         return {
           content: [
@@ -428,50 +186,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ],
         };
 
-      case "validate_auth":
-        const testResult = await apiClient.makeRequest("GET", "/health");
-
-        return {
-          content: [
-            {
-              type: "text",
-              text:
-                testResult.status === 200
-                  ? "Authentication is valid"
-                  : `Authentication failed: ${testResult.message}`,
-            },
-          ],
+      case "get_all_desktop_metrics":
+        const { timespan: allTimespan = "3m" } = args as {
+          timespan?: string;
         };
 
-      case "rate_limit_status":
-        const rateLimitStatus = await apiClient.getRateLimitStatus();
+        const allResults = await apiClient.getAllDesktopMetrics(allTimespan);
 
         return {
           content: [
             {
               type: "text",
-              text: `Rate Limit Status:
-      - Remaining: ${rateLimitStatus.remainingPoints}/${
-                rateLimitStatus.maxPoints
-              } requests
-      - Reset: ${rateLimitStatus.resetTime || "No reset needed"}
-      - Current usage: ${rateLimitStatus.totalHits} requests used`,
-            },
-          ],
-        };
-
-      case "clear_cache":
-        const { pattern } = args as { pattern?: string };
-        const clearedCount = apiClient.clearCache(pattern);
-
-        return {
-          content: [
-            {
-              type: "text",
-              text:
-                clearedCount === -1
-                  ? "All cache cleared"
-                  : `Cleared ${clearedCount} cache entries`,
+              text: JSON.stringify(allResults, null, 2),
             },
           ],
         };
@@ -480,13 +206,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error) {
+    console.error(`Tool error: ${error}`); // Debug logging
     return {
       content: [
         {
           type: "text",
-          text: `Error: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: `Error: ${error instanceof Error ? error.message : String(error)}`,
         },
       ],
       isError: true,
@@ -498,10 +223,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.log(picocolors.cyan(logo));
+  console.error("Docker Insights API MCP server running on stdio"); // Fixed: use stderr
 }
 
 main().catch((error) => {
-  console.error(picocolors.bold(picocolors.red("Server error:")), error);
+  console.error("Server error:", error);
   process.exit(1);
 });

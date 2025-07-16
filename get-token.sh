@@ -13,12 +13,12 @@ if [[ "$TOKEN" != "null" && "$TOKEN" != "" ]]; then
   echo "Token obtained successfully"
 
   # Update .env file
-  if grep -q "DOCKER_ACCESS_TOKEN=" .env; then
+  if grep -q "BEARER_TOKEN=" .env; then
     # Replace existing token
-    sed -i.bak "s/DOCKER_ACCESS_TOKEN=.*/DOCKER_ACCESS_TOKEN=$TOKEN/" .env
+    sed -i.bak "s/BEARER_TOKEN=.*/BEARER_TOKEN=$TOKEN/" .env
   else
     # Add new token
-    echo "DOCKER_ACCESS_TOKEN=$TOKEN" >> .env
+    echo "BEARER_TOKEN=$TOKEN" >> .env
   fi
 
   echo "Updated .env with new token"
