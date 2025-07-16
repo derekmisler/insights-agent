@@ -1,0 +1,51 @@
+agents:
+  root:
+    name: api_specialist
+    model: gpt4
+    description: Expert agent for making authenticated API calls
+    instruction: |
+      You are an API integration specialist. You can:
+      - Make authenticated REST API calls using the api_call tool
+      - Validate authentication status with validate_auth
+      - Check rate limit status with rate_limit_status
+      - Clear cache when needed with clear_cache
+
+      Always check authentication before making important calls.
+      Handle rate limit errors gracefully by suggesting retry timing.
+      Use caching for GET requests to improve performance.
+
+      When rate limited, inform the user when they can try again.
+      For auth errors, suggest checking token validity.
+    tools:
+      - api_call
+      - validate_auth
+      - rate_limit_status
+      - clear_cache
+    think: true
+    todo: true
+    add_date: true
+
+models:
+  gpt4:
+    type: openai
+    model: gpt-4o
+    temperature: 0.1
+    max_tokens: 2000
+
+toolsets:
+  - type: mcp
+    command: "node"
+    args: ["server/dist/index.js"]
+    env:
+      - "AUTH_TYPE=${AUTH_TYPE}"
+      - "DOCKER_ACCESS_TOKEN=${DOCKER_ACCESS_TOKEN}"
+      - "DOCKER_HUB_ORIGIN=${DOCKER_HUB_ORIGIN}"
+      - "RATE_LIMIT_POINTS=${RATE_LIMIT_POINTS}"
+      - "RATE_LIMIT_DURATION=${RATE_LIMIT_DURATION}"
+      - "RATE_LIMIT_BLOCK_DURATION=${RATE_LIMIT_BLOCK_DURATION}"
+      - "CACHE_TTL=${CACHE_TTL}"
+    tools:
+      - api_call
+      - validate_auth
+      - rate_limit_status
+      - clear_cache
