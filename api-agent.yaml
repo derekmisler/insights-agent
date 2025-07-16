@@ -1,0 +1,53 @@
+agents:
+  root:
+    name: api_specialist
+    model: claude
+    description: Fast API specialist
+    instruction: |
+      You are a fast API specialist. For simple status checks:
+      - Use tools directly without extensive reasoning
+      - Give concise, immediate responses
+      - Don't overthink simple requests
+
+      For rate limit status: just call the tool and report the numbers.
+      For auth validation: make a quick health check.
+    tools:
+      - api_call
+      - validate_auth
+      - rate_limit_status
+      - clear_cache
+    think: false
+    todo: false
+    add_date: false
+
+models:
+  gpt4:
+    type: openai
+    model: gpt-4o-mini
+    temperature: 0.0
+    max_tokens: 500
+    stream: true
+  claude:
+    type: anthropic
+    model: claude-3-haiku-20240307  # Fastest Claude model
+    temperature: 0.0
+    max_tokens: 200
+    stream: true
+
+toolsets:
+  - type: mcp
+    command: "node"
+    args: ["server/dist/index.js"]
+    env:
+      - "AUTH_TYPE=${AUTH_TYPE}"
+      - "DOCKER_ACCESS_TOKEN=${DOCKER_ACCESS_TOKEN}"
+      - "DOCKER_HUB_ORIGIN=${DOCKER_HUB_ORIGIN}"
+      - "RATE_LIMIT_POINTS=${RATE_LIMIT_POINTS}"
+      - "RATE_LIMIT_DURATION=${RATE_LIMIT_DURATION}"
+      - "RATE_LIMIT_BLOCK_DURATION=${RATE_LIMIT_BLOCK_DURATION}"
+      - "CACHE_TTL=${CACHE_TTL}"
+    tools:
+      - api_call
+      - validate_auth
+      - rate_limit_status
+      - clear_cache

@@ -1,22 +1,22 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   Tool,
-} from '@modelcontextprotocol/sdk/types.js';
-import axios, { AxiosInstance, AxiosResponse } from 'axios';
-import * as dotenv from 'dotenv';
-import NodeCache from 'node-cache';
-import picocolors from 'picocolors';
-import { RateLimiterMemory, RateLimiterRes } from 'rate-limiter-flexible';
+} from "@modelcontextprotocol/sdk/types.js";
+import axios, { AxiosInstance, AxiosResponse } from "axios";
+import * as dotenv from "dotenv";
+import NodeCache from "node-cache";
+import picocolors from "picocolors";
+import { RateLimiterMemory, RateLimiterRes } from "rate-limiter-flexible";
 
-import { logo } from './logo';
+import { logo } from "./logo";
 
 dotenv.config();
 
 interface AuthConfig {
-  type: 'bearer' | 'apikey' | 'oauth2';
+  type: "bearer" | "apikey" | "oauth2";
   token?: string;
   apiKey?: string;
   clientId?: string;
@@ -25,8 +25,8 @@ interface AuthConfig {
 }
 
 interface RateLimitConfig {
-  points: number;      // Number of requests
-  duration: number;    // Time window in seconds
+  points: number; // Number of requests
+  duration: number; // Time window in seconds
   blockDuration: number; // Block duration in seconds after limit exceeded
 }
 
@@ -39,7 +39,7 @@ class RateLimitError extends Error {
     public totalHits: number
   ) {
     super(message);
-    this.name = 'RateLimitError';
+    this.name = "RateLimitError";
   }
 }
 
@@ -50,27 +50,32 @@ class AuthenticatedAPIClient {
   private rateLimiter: RateLimiterMemory;
   private cache: NodeCache;
 
-  constructor(baseURL: string, authConfig: AuthConfig, rateLimitConfig?: RateLimitConfig) {
+  constructor(
+    baseURL: string,
+    authConfig: AuthConfig,
+    rateLimitConfig?: RateLimitConfig
+  ) {
     this.baseURL = baseURL;
     this.authConfig = authConfig;
 
     // Initialize rate limiter
     const defaultRateLimit = {
-      points: parseInt(process.env.RATE_LIMIT_POINTS || '100'),
-      duration: parseInt(process.env.RATE_LIMIT_DURATION || '60'),
-      blockDuration: parseInt(process.env.RATE_LIMIT_BLOCK_DURATION || '60'),
+      points: parseInt(process.env.RATE_LIMIT_POINTS || "100"),
+      duration: parseInt(process.env.RATE_LIMIT_DURATION || "60"),
+      blockDuration: parseInt(process.env.RATE_LIMIT_BLOCK_DURATION || "60"),
     };
 
     this.rateLimiter = new RateLimiterMemory({
-      keyPrefix: 'api_calls',
+      keyPrefix: "api_calls",
       points: rateLimitConfig?.points || defaultRateLimit.points,
       duration: rateLimitConfig?.duration || defaultRateLimit.duration,
-      blockDuration: rateLimitConfig?.blockDuration || defaultRateLimit.blockDuration,
+      blockDuration:
+        rateLimitConfig?.blockDuration || defaultRateLimit.blockDuration,
     });
 
     // Initialize cache
     this.cache = new NodeCache({
-      stdTTL: parseInt(process.env.CACHE_TTL || '300'), // 5 minutes default
+      stdTTL: parseInt(process.env.CACHE_TTL || "300"), // 5 minutes default
       checkperiod: 60, // Check for expired keys every 60 seconds
     });
 
@@ -78,8 +83,8 @@ class AuthenticatedAPIClient {
       baseURL,
       timeout: 30000,
       headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'cagent-mcp-server/1.0',
+        "Content-Type": "application/json",
+        "User-Agent": "cagent-mcp-server/1.0",
       },
     });
 
@@ -99,7 +104,7 @@ class AuthenticatedAPIClient {
       (response) => response,
       async (error) => {
         if (error.response?.status === 401) {
-          if (this.authConfig.type === 'oauth2') {
+          if (this.authConfig.type === "oauth2") {
             await this.refreshOAuth2Token();
             return this.axiosInstance.request(error.config);
           }
@@ -111,20 +116,20 @@ class AuthenticatedAPIClient {
 
   private async addAuthHeaders(config: any) {
     switch (this.authConfig.type) {
-      case 'bearer':
+      case "bearer":
         if (this.authConfig.token) {
-          config.headers['Authorization'] = `Bearer ${this.authConfig.token}`;
+          config.headers["Authorization"] = `Bearer ${this.authConfig.token}`;
         }
         break;
-      case 'apikey':
+      case "apikey":
         if (this.authConfig.apiKey) {
-          config.headers['X-API-Key'] = this.authConfig.apiKey;
+          config.headers["X-API-Key"] = this.authConfig.apiKey;
         }
         break;
-      case 'oauth2':
+      case "oauth2":
         const token = await this.getOAuth2Token();
         if (token) {
-          config.headers['Authorization'] = `Bearer ${token}`;
+          config.headers["Authorization"] = `Bearer ${token}`;
         }
         break;
     }
@@ -135,13 +140,17 @@ class AuthenticatedAPIClient {
   }
 
   private async refreshOAuth2Token(): Promise<void> {
-    if (!this.authConfig.tokenUrl || !this.authConfig.clientId || !this.authConfig.clientSecret) {
-      throw new Error('OAuth2 configuration incomplete');
+    if (
+      !this.authConfig.tokenUrl ||
+      !this.authConfig.clientId ||
+      !this.authConfig.clientSecret
+    ) {
+      throw new Error("OAuth2 configuration incomplete");
     }
 
     try {
       const response = await axios.post(this.authConfig.tokenUrl, {
-        grant_type: 'client_credentials',
+        grant_type: "client_credentials",
         client_id: this.authConfig.clientId,
         client_secret: this.authConfig.clientSecret,
       });
@@ -152,12 +161,21 @@ class AuthenticatedAPIClient {
     }
   }
 
-  private generateCacheKey(method: string, endpoint: string, data?: any): string {
-    const dataHash = data ? JSON.stringify(data) : '';
+  private generateCacheKey(
+    method: string,
+    endpoint: string,
+    data?: any
+  ): string {
+    const dataHash = data ? JSON.stringify(data) : "";
     return `${method}:${endpoint}:${dataHash}`;
   }
 
-  async makeRequest(method: string, endpoint: string, data?: any, useCache = true): Promise<any> {
+  async makeRequest(
+    method: string,
+    endpoint: string,
+    data?: any,
+    useCache = true
+  ): Promise<any> {
     const requestKey = `${this.baseURL}:${endpoint}`;
 
     try {
@@ -165,7 +183,7 @@ class AuthenticatedAPIClient {
       await this.rateLimiter.consume(requestKey);
 
       // Check cache for GET requests
-      if (useCache && method.toUpperCase() === 'GET') {
+      if (useCache && method.toUpperCase() === "GET") {
         const cacheKey = this.generateCacheKey(method, endpoint, data);
         const cachedResult = this.cache.get(cacheKey);
         if (cachedResult) {
@@ -193,21 +211,24 @@ class AuthenticatedAPIClient {
       };
 
       // Cache successful GET requests
-      if (useCache && method.toUpperCase() === 'GET' && response.status === 200) {
+      if (
+        useCache &&
+        method.toUpperCase() === "GET" &&
+        response.status === 200
+      ) {
         const cacheKey = this.generateCacheKey(method, endpoint, data);
         this.cache.set(cacheKey, result);
       }
 
       return result;
-
     } catch (error: unknown) {
       // Handle rate limit errors
-      if (error && typeof error === 'object' && 'remainingPoints' in error) {
+      if (error && typeof error === "object" && "remainingPoints" in error) {
         const rateLimitError = error as any; // Type assertion for rate limiter error
         const resetTime = new Date(Date.now() + rateLimitError.msBeforeNext);
         return {
           status: 429,
-          error: 'Rate limit exceeded',
+          error: "Rate limit exceeded",
           message: `Rate limit exceeded. Try again at ${resetTime.toISOString()}`,
           retryAfter: rateLimitError.msBeforeNext,
           remainingPoints: rateLimitError.remainingPoints,
@@ -230,18 +251,30 @@ class AuthenticatedAPIClient {
 
   async getRateLimitStatus(): Promise<any> {
     const requestKey = `${this.baseURL}:status`;
+
+    // Get rate limit info without making an actual request
+    const rateLimiterInfo = this.rateLimiter.points;
+
     try {
       const res: RateLimiterRes | null = await this.rateLimiter.get(requestKey);
+
       return {
-        remainingPoints: res ? res.remainingPoints : this.rateLimiter.points,
+        remainingPoints: res ? res.remainingPoints : rateLimiterInfo,
         msBeforeNext: res ? res.msBeforeNext : 0,
-        totalHits: res ? this.rateLimiter.points - res.remainingPoints : 0,
+        totalHits: res ? rateLimiterInfo - res.remainingPoints : 0,
+        maxPoints: rateLimiterInfo,
+        resetTime: res
+          ? new Date(Date.now() + res.msBeforeNext).toISOString()
+          : null,
       };
     } catch (error) {
+      // Return default values immediately if there's an error
       return {
-        remainingPoints: this.rateLimiter.points,
+        remainingPoints: rateLimiterInfo,
         msBeforeNext: 0,
         totalHits: 0,
+        maxPoints: rateLimiterInfo,
+        resetTime: null,
       };
     }
   }
@@ -249,9 +282,9 @@ class AuthenticatedAPIClient {
   clearCache(pattern?: string): number {
     if (pattern) {
       const keys = this.cache.keys();
-      const matchingKeys = keys.filter(key => key.includes(pattern));
+      const matchingKeys = keys.filter((key) => key.includes(pattern));
       let deletedCount = 0;
-      matchingKeys.forEach(key => {
+      matchingKeys.forEach((key) => {
         if (this.cache.del(key)) deletedCount++;
       });
       return deletedCount;
@@ -264,7 +297,7 @@ class AuthenticatedAPIClient {
 
 // Initialize the API client
 const authConfig: AuthConfig = {
-  type: (process.env.AUTH_TYPE as 'bearer' | 'apikey' | 'oauth2') || 'bearer',
+  type: (process.env.AUTH_TYPE as "bearer" | "apikey" | "oauth2") || "bearer",
   token: process.env.DOCKER_ACCESS_TOKEN || process.env.API_TOKEN,
   apiKey: process.env.API_KEY,
   clientId: process.env.CLIENT_ID,
@@ -272,7 +305,7 @@ const authConfig: AuthConfig = {
   tokenUrl: process.env.TOKEN_URL,
 };
 if (!process.env.DOCKER_HUB_ORIGIN) {
-  throw new Error('DOCKER_HUB_ORIGIN is not set');
+  throw new Error("DOCKER_HUB_ORIGIN is not set");
 }
 const apiClient = new AuthenticatedAPIClient(
   process.env.DOCKER_HUB_ORIGIN,
@@ -282,8 +315,8 @@ const apiClient = new AuthenticatedAPIClient(
 // Create MCP server
 const server = new Server(
   {
-    name: 'authenticated-api-server',
-    version: '1.0.0',
+    name: "authenticated-api-server",
+    version: "1.0.0",
   },
   {
     capabilities: {
@@ -295,58 +328,60 @@ const server = new Server(
 // Define available tools
 const tools: Tool[] = [
   {
-    name: 'api_call',
-    description: 'Make authenticated API calls with rate limiting and caching',
+    name: "api_call",
+    description: "Make authenticated API calls with rate limiting and caching",
     inputSchema: {
-      type: 'object',
+      type: "object",
       properties: {
         method: {
-          type: 'string',
-          enum: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-          description: 'HTTP method',
+          type: "string",
+          enum: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+          description: "HTTP method",
         },
         endpoint: {
-          type: 'string',
-          description: 'API endpoint (e.g., /users, /orders/123)',
+          type: "string",
+          description: "API endpoint (e.g., /users, /orders/123)",
         },
         data: {
-          type: 'object',
-          description: 'Request payload for POST/PUT/PATCH requests',
+          type: "object",
+          description: "Request payload for POST/PUT/PATCH requests",
         },
         useCache: {
-          type: 'boolean',
-          description: 'Whether to use caching for GET requests (default: true)',
+          type: "boolean",
+          description:
+            "Whether to use caching for GET requests (default: true)",
           default: true,
         },
       },
-      required: ['method', 'endpoint'],
+      required: ["method", "endpoint"],
     },
   },
   {
-    name: 'validate_auth',
-    description: 'Validate current authentication status',
+    name: "validate_auth",
+    description: "Validate current authentication status",
     inputSchema: {
-      type: 'object',
+      type: "object",
       properties: {},
     },
   },
   {
-    name: 'rate_limit_status',
-    description: 'Check current rate limit status',
+    name: "rate_limit_status",
+    description: "Check current rate limit status",
     inputSchema: {
-      type: 'object',
+      type: "object",
       properties: {},
     },
   },
   {
-    name: 'clear_cache',
-    description: 'Clear cached responses',
+    name: "clear_cache",
+    description: "Clear cached responses",
     inputSchema: {
-      type: 'object',
+      type: "object",
       properties: {
         pattern: {
-          type: 'string',
-          description: 'Optional pattern to match cache keys (clears all if not provided)',
+          type: "string",
+          description:
+            "Optional pattern to match cache keys (clears all if not provided)",
         },
       },
     },
@@ -364,62 +399,79 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
-      case 'api_call':
-        const { method, endpoint, data, useCache = true } = args as {
+      case "api_call":
+        const {
+          method,
+          endpoint,
+          data,
+          useCache = true,
+        } = args as {
           method: string;
           endpoint: string;
           data?: any;
           useCache?: boolean;
         };
 
-        const result = await apiClient.makeRequest(method, endpoint, data, useCache);
+        const result = await apiClient.makeRequest(
+          method,
+          endpoint,
+          data,
+          useCache
+        );
 
         return {
           content: [
             {
-              type: 'text',
+              type: "text",
               text: JSON.stringify(result, null, 2),
             },
           ],
         };
 
-      case 'validate_auth':
-        const testResult = await apiClient.makeRequest('GET', '/health');
+      case "validate_auth":
+        const testResult = await apiClient.makeRequest("GET", "/health");
 
         return {
           content: [
             {
-              type: 'text',
-              text: testResult.status === 200
-                ? 'Authentication is valid'
-                : `Authentication failed: ${testResult.message}`,
+              type: "text",
+              text:
+                testResult.status === 200
+                  ? "Authentication is valid"
+                  : `Authentication failed: ${testResult.message}`,
             },
           ],
         };
 
-      case 'rate_limit_status':
+      case "rate_limit_status":
         const rateLimitStatus = await apiClient.getRateLimitStatus();
 
         return {
           content: [
             {
-              type: 'text',
-              text: JSON.stringify(rateLimitStatus, null, 2),
+              type: "text",
+              text: `Rate Limit Status:
+      - Remaining: ${rateLimitStatus.remainingPoints}/${
+                rateLimitStatus.maxPoints
+              } requests
+      - Reset: ${rateLimitStatus.resetTime || "No reset needed"}
+      - Current usage: ${rateLimitStatus.totalHits} requests used`,
             },
           ],
         };
 
-      case 'clear_cache':
+      case "clear_cache":
         const { pattern } = args as { pattern?: string };
         const clearedCount = apiClient.clearCache(pattern);
 
         return {
           content: [
             {
-              type: 'text',
-              text: clearedCount === -1
-                ? 'All cache cleared'
-                : `Cleared ${clearedCount} cache entries`,
+              type: "text",
+              text:
+                clearedCount === -1
+                  ? "All cache cleared"
+                  : `Cleared ${clearedCount} cache entries`,
             },
           ],
         };
@@ -431,8 +483,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return {
       content: [
         {
-          type: 'text',
-          text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          type: "text",
+          text: `Error: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
         },
       ],
       isError: true,
@@ -448,6 +502,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(picocolors.bold(picocolors.red('Server error:')), error);
+  console.error(picocolors.bold(picocolors.red("Server error:")), error);
   process.exit(1);
 });
