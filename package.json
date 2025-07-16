@@ -1,0 +1,32 @@
+{
+  "name": "insights-agent",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node --esm src/server.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/derekmisler/insights-agent.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/derekmisler/insights-agent/issues"
+  },
+  "homepage": "https://github.com/derekmisler/insights-agent#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.15.1",
+    "axios": "^1.10.0",
+    "dotenv": "^17.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.14",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
