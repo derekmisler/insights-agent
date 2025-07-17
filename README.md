@@ -143,110 +143,6 @@ If the AI agent is not available:
 }
 ```
 
-## Frontend Integration
-
-### JavaScript/TypeScript Example
-
-```javascript
-// Send data to Captain Insights
-async function sendToAI(data) {
-  try {
-    const response = await fetch('http://localhost:3001/api/captain-insights', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    });
-
-    const result = await response.json();
-
-    if (result.success) {
-      console.log('AI Analysis:', result.agentAnalysis);
-    } else {
-      console.error('AI Error:', result.message);
-    }
-
-    return result;
-  } catch (error) {
-    console.error('Network error:', error);
-  }
-}
-
-// Usage examples - Captain Insights will analyze any data you send
-sendToAI({
-  metric: 'users',
-  timespan: '3m',
-  data: 'Please analyze our team Docker usage'
-});
-
-sendToAI({
-  message: 'What security recommendations do you have?',
-  context: { containers: 15, images: 8, vulnerabilities: ['CVE-2023-1234'] }
-});
-
-sendToAI({
-  question: 'How can we optimize our Docker Desktop deployment?',
-  environment: 'development',
-  teamSize: 20
-});
-```
-
-### React Example
-
-```jsx
-import { useState } from 'react';
-
-function InsightsComponent() {
-  const [analysis, setAnalysis] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const analyzeData = async (data) => {
-    setLoading(true);
-    try {
-      const response = await fetch('http://localhost:3001/api/captain-insights', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-
-      const result = await response.json();
-      setAnalysis(result.agentAnalysis);
-    } catch (error) {
-      setAnalysis('Error connecting to AI agent');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div>
-      <button onClick={() => analyzeData({ metric: 'users' })}>
-        Get AI Insights
-      </button>
-      {loading && <p>Analyzing...</p>}
-      {analysis && <p>Analysis: {analysis}</p>}
-    </div>
-  );
-}
-```
-
-## Development Scripts
-
-```bash
-# Development mode (auto-reload)
-yarn http-server
-
-# Build TypeScript
-yarn build
-
-# Run built version
-yarn http-server:build
-
-# Run original MCP server
-yarn dev
-```
-
 ## Troubleshooting
 
 ### 1. "Cannot connect to cagent API server"
@@ -276,18 +172,7 @@ yarn dev
 - Verify the message format: `[{"role": "user", "content": "..."}]`
 - Look for session creation logs in the HTTP server console
 
-### 4. CORS issues from browser
-
-**Problem**: Browser blocks requests due to CORS policy.
-
-**Solution**: The server includes CORS middleware for common development ports:
-- `http://localhost:3000` (Create React App)
-- `http://localhost:5173` (Vite)
-- `http://localhost:8080` (Webpack dev server)
-
-If using a different port, update the CORS configuration in `server/src/http-server.ts`.
-
-### 5. TypeScript compilation errors
+### 4. TypeScript compilation errors
 
 **Problem**: `ts-node` fails to compile TypeScript.
 
@@ -310,14 +195,6 @@ insights-agent/
 ├── tsconfig.json           # TypeScript configuration
 └── README.md              # This file
 ```
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `HTTP_PORT` | `3001` | Port for HTTP server |
-| `BEARER_TOKEN` | - | Docker API token (optional) |
-| `DOCKER_INSIGHTS_API_HOST` | `https://api.docker.com` | Docker API host (optional) |
 
 ## Architecture
 
