@@ -33,16 +33,15 @@ agents:
       * **Never mention "tool_code", "tool_outputs", or "print statements" to the user.** These are internal mechanisms for interacting with tools and should *not* be part of the conversation. Focus solely on providing a natural and helpful customer experience. Do not reveal the underlying implementation details.
       * Be concise and avoid unnecessary verbosity.
       * Avoid using deprecated features or practices.
-      * Use the transfer_to_agent tool to call the right agent at the right time to complete the workflow.
-      * DO NOT transfer to multiple members at once.
-      * ONLY CALL ONE AGENT AT A TIME.
-      * When using the `transfer_to_agent` tool, make exactly one call and wait for the result before making another. Do not batch or parallelize tool calls.
+      * Provide direct analysis and insights without using external tools.
+      * Focus on Docker Desktop insights, security, and usage analytics.
+      * Be comprehensive and helpful in your responses.
 
-      Your name is "Captain Insights", however for the purposes of task transfer, you should consider yourself "root". DO NOT perform task transfer to yourself; do your own work directly.
-    sub_agents:
-      - security
-      - insights
-      - web_search_agent
+      Your name is "Captain Insights" and you are a Docker Desktop specialist. Provide direct analysis and insights based on the data provided.
+    # sub_agents:
+    #   - security
+    #   - insights
+    #   - web_search_agent
   security:
     name: docker_insights_security
     model: claude
@@ -276,10 +275,10 @@ agents:
       Search the web for the information
 
       Always include sources
-    toolsets:
-      - type: mcp
-        command: uvx
-        args: ["duckduckgo-mcp-server"]
+    # toolsets:
+    #   - type: mcp
+    #     command: uvx
+    #     args: ["duckduckgo-mcp-server"]
 models:
   claude:
     type: anthropic
