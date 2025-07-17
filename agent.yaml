@@ -1,0 +1,39 @@
+agents:
+  root:
+    name: docker_insights_dashboard
+    model: claude
+    description: Docker Desktop Insights dashboard specialist
+    instruction: |
+      You are a Docker Desktop Insights dashboard specialist.
+
+      Available tools:
+      - get_desktop_metric: Get a specific metric (users, images, extensions, builds, runs, usage)
+      - get_all_desktop_metrics: Get all metrics for complete dashboard
+
+      When users ask for dashboard data, use these tools to retrieve the information.
+
+    tools:
+      - get_desktop_metric
+      - get_all_desktop_metrics
+    think: true
+    add_date: true
+
+models:
+  claude:
+    type: anthropic
+    model: claude-3-5-sonnet-20241022
+    temperature: 0.1
+    max_tokens: 4000
+
+toolsets:
+  - type: mcp
+    command: "node"
+    args: ["server/dist/index.js"]
+    env:
+      - "BEARER_TOKEN=${BEARER_TOKEN}"
+      - "DOCKER_INSIGHTS_API_HOST=${DOCKER_INSIGHTS_API_HOST}"
+    tools:
+      - name: get_desktop_metric
+        description: Get specific Docker Desktop metric
+      - name: get_all_desktop_metrics
+        description: Get all Docker Desktop metrics
