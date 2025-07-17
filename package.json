@@ -7,7 +7,9 @@
   "scripts": {
     "build": "rm -rf server/dist && tsc --outDir server/dist",
     "start": "node server/dist/index.js",
-    "dev": "ts-node --esm server/src/index.ts"
+    "dev": "ts-node --esm server/src/index.ts",
+    "http-server": "node --loader ts-node/esm server/src/http-server.ts",
+    "http-server:build": "node server/dist/http-server.js"
   },
   "repository": {
     "type": "git",
@@ -23,14 +25,22 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.15.1",
     "axios": "^1.10.0",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "express": "^4.21.2",
     "node-cache": "^5.1.2",
     "picocolors": "^1.1.1",
     "rate-limiter-flexible": "^7.1.1"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
     "@types/node": "^24.0.14",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
+  },
+  "ts-node": {
+    "esm": true,
+    "experimentalSpecifierResolution": "node"
   }
 }
