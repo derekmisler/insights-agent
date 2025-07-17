@@ -9,19 +9,54 @@ async function communicateWithAgent(data: any): Promise<any> {
     const dataString = JSON.stringify(data, null, 2);
     const prompt = `I received the following data from the UI: ${dataString}. Please analyze this data and provide insights.`;
 
-    // Communicate with cagent API server on localhost:8080
-    const response = await axios.post('http://localhost:8080/api/chat', {
-      message: prompt,
-      agent: 'root'
-    }, {
-      timeout: 30000, // 30 second timeout
+    const selectedAgent = 'agent.yaml'; // Use the actual agent name from the API
+
+    // Step 1: Create a new session
+    const sessionResponse = await axios.post('http://localhost:8080/api/sessions', {}, {
+      timeout: 10000,
       headers: {
         'Content-Type': 'application/json'
       }
     });
 
+    const sessionId = sessionResponse.data.id;
+    console.log(`Created session: ${sessionId}`);
+
+    // Step 2: Send message to the session and handle streaming response
+    const response = await axios.post(`http://localhost:8080/api/sessions/${sessionId}/agent/${selectedAgent}`, [
+      {
+        role: "user",
+        content: prompt,
+      },
+    ], {
+      timeout: 30000, // 30 second timeout
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      responseType: 'text' // Handle as text to parse SSE manually
+    });
+
+    // Parse the SSE response to extract the content
+    const sseData = response.data;
+    let fullResponse = '';
+
+    // Extract content from SSE data lines
+    const lines = sseData.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          const jsonData = JSON.parse(line.substring(6));
+          if (jsonData.choice && jsonData.choice.delta && jsonData.choice.delta.content) {
+            fullResponse += jsonData.choice.delta.content;
+          }
+        } catch (e) {
+          // Skip invalid JSON lines
+        }
+      }
+    }
+
     return {
-      agentResponse: response.data.response || response.data.message || JSON.stringify(response.data),
+      agentResponse: fullResponse.trim() || "Agent responded but no content was extracted",
       success: true
     };
   } catch (error: any) {
@@ -31,7 +66,7 @@ async function communicateWithAgent(data: any): Promise<any> {
     if (error.code === 'ECONNREFUSED') {
       errorMessage = "Cannot connect to cagent API server. Make sure it's running on localhost:8080";
     } else if (error.response) {
-      errorMessage = `API server responded with ${error.response.status}: ${error.response.data}`;
+      errorMessage = `API server responded with ${error.response.status}: ${error.response.statusText}`;
     } else {
       errorMessage = error.message || String(error);
     }

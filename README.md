@@ -7,7 +7,9 @@ A HTTP server that provides an endpoint for UI applications to communicate with 
 This project consists of:
 - **HTTP Server**: Express.js server running on `localhost:3001`
 - **AI Agent Integration**: Communicates with `cagent` API server on `localhost:8080`
+- **Session Management**: Creates sessions and handles streaming responses
 - **Single Endpoint**: `/api/captain-insights` accepts POST requests with JSON data
+- **Captain Insights Agent**: Specialized AI for Docker Desktop insights and security analysis
 
 ## Prerequisites
 
@@ -65,6 +67,25 @@ Available endpoints:
   POST /api/captain-insights - Receives POST data and communicates with AI agent
 ```
 
+## Current Status
+
+✅ **FULLY FUNCTIONAL** - The system is working end-to-end!
+
+**What's Working:**
+- ✅ HTTP server accepts POST requests to `/api/captain-insights`
+- ✅ Automatic session creation with cagent API
+- ✅ Real-time communication with Captain Insights AI agent
+- ✅ Streaming response parsing and aggregation
+- ✅ Full AI analysis responses about Docker Desktop insights
+- ✅ Error handling and proper status reporting
+
+**Implementation Details:**
+- Uses `/api/sessions` to create new sessions automatically
+- Sends messages in OpenAI-style format: `[{"role": "user", "content": "..."}]`
+- Handles Server-Sent Events (SSE) streaming responses
+- Aggregates streaming chunks into complete AI responses
+- Agent name: `agent.yaml` (Captain Insights specialist)
+
 ## API Usage
 
 ### Health Check
@@ -101,8 +122,8 @@ curl -X POST \
     "timespan": "1h",
     "data": "test insights"
   },
-  "agentAnalysis": "AI agent response here...",
-  "timestamp": "2025-07-17T13:30:00.000Z",
+  "agentAnalysis": "Based on your Docker Desktop usage data, I notice you're requesting user metrics for a 1-hour timespan. However, Docker Desktop Insights data is updated daily, not hourly. Let me provide you with insights about user metrics that are available:\n\n**Active Users**: These are users who have actively used Docker Desktop and are signed in with a licensed Docker account...",
+  "timestamp": "2025-07-17T13:50:00.000Z",
   "success": true,
   "message": "Request processed by AI agent"
 }
@@ -152,17 +173,22 @@ async function sendToAI(data) {
   }
 }
 
-// Usage examples
+// Usage examples - Captain Insights will analyze any data you send
 sendToAI({
   metric: 'users',
-  timespan: '24h',
-  bearerToken: 'your-docker-token',
-  data: 'Additional context here'
+  timespan: '3m',
+  data: 'Please analyze our team Docker usage'
 });
 
 sendToAI({
-  message: 'Analyze my Docker usage patterns',
-  context: { containers: 15, images: 8 }
+  message: 'What security recommendations do you have?',
+  context: { containers: 15, images: 8, vulnerabilities: ['CVE-2023-1234'] }
+});
+
+sendToAI({
+  question: 'How can we optimize our Docker Desktop deployment?',
+  environment: 'development',
+  teamSize: 20
 });
 ```
 
@@ -240,7 +266,17 @@ yarn dev
 - Stop other services on port 3001: `lsof -ti:3001 | xargs kill`
 - Or change the port: `HTTP_PORT=3002 yarn http-server`
 
-### 3. CORS issues from browser
+### 3. AI agent not responding or giving errors
+
+**Problem**: The AI agent returns errors or doesn't respond properly.
+
+**Solution**:
+- Ensure the correct agent name is being used (`agent.yaml`)
+- Check that sessions are being created properly
+- Verify the message format: `[{"role": "user", "content": "..."}]`
+- Look for session creation logs in the HTTP server console
+
+### 4. CORS issues from browser
 
 **Problem**: Browser blocks requests due to CORS policy.
 
@@ -251,7 +287,7 @@ yarn dev
 
 If using a different port, update the CORS configuration in `server/src/http-server.ts`.
 
-### 4. TypeScript compilation errors
+### 5. TypeScript compilation errors
 
 **Problem**: `ts-node` fails to compile TypeScript.
 
@@ -288,11 +324,20 @@ insights-agent/
 ```mermaid
 graph LR
     A[Your UI/Frontend] -->|POST JSON| B[HTTP Server :3001]
-    B -->|HTTP API| C[cagent API :8080]
-    C -->|AI Processing| D[Captain Insights Agent]
-    D -->|Response| C
-    C -->|JSON Response| B
-    B -->|Analysis Result| A
+    B -->|Create Session| C[cagent API :8080]
+    C -->|Session ID| B
+    B -->|Send Message| D["/api/sessions/{id}/agent/agent.yaml"]
+    D -->|Streaming Response| B
+    B -->|Parse & Aggregate| E[Full AI Response]
+    E -->|JSON Response| A
+
+    subgraph "Captain Insights Agent"
+        F[Docker Insights Specialist]
+        G[Security Expert]
+        H[Usage Analytics]
+    end
+
+    D -.->|AI Processing| F
 ```
 
 ## License
