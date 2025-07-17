@@ -10,9 +10,15 @@ const SESSION_REUSE_TIME = 5 * 60 * 1000; // Reuse session for 5 minutes
 // Function to communicate with AI agent via cagent API server
 async function communicateWithAgent(data: any): Promise<any> {
   try {
-    // Convert the received data to a JSON string for the agent prompt (optimized for speed)
+        // Convert the received data to a JSON string for the agent prompt (optimized for speed)
     const dataString = JSON.stringify(data);
-    const prompt = `Analyze: ${dataString}`;
+    let prompt: string;
+
+    if (!data || Object.keys(data).length === 0 || dataString === '{}') {
+      prompt = "Provide Docker Desktop insights and recommendations.";
+    } else {
+      prompt = `Analyze this data and provide Docker insights: ${dataString}`;
+    }
 
         const selectedAgent = 'agent.yaml'; // Use the actual agent name from the API
 
