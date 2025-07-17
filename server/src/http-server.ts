@@ -2,25 +2,42 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import axios from "axios";
 
+// Session cache for reusing sessions (speeds up subsequent requests)
+let cachedSessionId: string | null = null;
+let sessionCreatedAt: number = 0;
+const SESSION_REUSE_TIME = 5 * 60 * 1000; // Reuse session for 5 minutes
+
 // Function to communicate with AI agent via cagent API server
 async function communicateWithAgent(data: any): Promise<any> {
   try {
-    // Convert the received data to a JSON string for the agent prompt
-    const dataString = JSON.stringify(data, null, 2);
-    const prompt = `I received the following data from the UI: ${dataString}. Please analyze this data and provide insights.`;
+    // Convert the received data to a JSON string for the agent prompt (optimized for speed)
+    const dataString = JSON.stringify(data);
+    const prompt = `Analyze: ${dataString}`;
 
-    const selectedAgent = 'agent.yaml'; // Use the actual agent name from the API
+        const selectedAgent = 'agent.yaml'; // Use the actual agent name from the API
 
-    // Step 1: Create a new session
-    const sessionResponse = await axios.post('http://localhost:8080/api/sessions', {}, {
-      timeout: 10000,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    // Step 1: Get or create a session (with caching for speed)
+    let sessionId: string;
+    const now = Date.now();
 
-    const sessionId = sessionResponse.data.id;
-    console.log(`Created session: ${sessionId}`);
+    if (cachedSessionId && (now - sessionCreatedAt) < SESSION_REUSE_TIME) {
+      // Reuse existing session
+      sessionId = cachedSessionId;
+      console.log(`Reusing session: ${sessionId}`);
+    } else {
+      // Create new session
+      const sessionResponse = await axios.post('http://localhost:8080/api/sessions', {}, {
+        timeout: 5000, // Reduced from 10s to 5s
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      sessionId = sessionResponse.data.id;
+      cachedSessionId = sessionId;
+      sessionCreatedAt = now;
+      console.log(`Created new session: ${sessionId}`);
+    }
 
     // Step 2: Send message to the session and handle streaming response
     const response = await axios.post(`http://localhost:8080/api/sessions/${sessionId}/agent/${selectedAgent}`, [
@@ -29,7 +46,7 @@ async function communicateWithAgent(data: any): Promise<any> {
         content: prompt,
       },
     ], {
-      timeout: 30000, // 30 second timeout
+      timeout: 15000, // Reduced from 30s to 15s for faster failure detection
       headers: {
         'Content-Type': 'application/json'
       },

@@ -283,5 +283,6 @@ agents:
 models:
   claude:
     type: anthropic
-    model: claude-3-5-sonnet-latest
-    max_tokens: 4000
+    model: claude-3-5-haiku-20241022
+    max_tokens: 1000  # Reduced for faster responses
+    temperature: 0.1  # Lower temperature for faster, more focused responses
