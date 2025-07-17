@@ -1,6 +1,6 @@
-import express, { Request, Response } from "express";
-import cors from "cors";
 import axios from "axios";
+import cors from "cors";
+import express, { Request, Response } from "express";
 
 // Session cache for reusing sessions (speeds up subsequent requests)
 let cachedSessionId: string | null = null;
@@ -11,16 +11,28 @@ const SESSION_REUSE_TIME = 5 * 60 * 1000; // Reuse session for 5 minutes
 async function communicateWithAgent(data: any): Promise<any> {
   try {
         // Convert the received data to a JSON string for the agent prompt (optimized for speed)
-    const dataString = JSON.stringify(data);
     let prompt: string;
 
-    if (!data || Object.keys(data).length === 0 || dataString === '{}') {
+    if (!data || Object.keys(data).length === 0 || JSON.stringify(data) === '{}') {
       prompt = "Provide Docker Desktop insights and recommendations.";
     } else {
-      prompt = `Analyze this data and provide Docker insights: ${dataString}`;
+      const { references, ...otherData } = data;
+
+      if (references) {
+        const contextString = typeof references === 'string' ? references : JSON.stringify(references);
+        const dataString = Object.keys(otherData).length > 0 ? JSON.stringify(otherData) : '';
+
+        if (dataString) {
+          prompt = `Context: ${contextString}\n\nAnalyze this data and provide Docker insights: ${dataString}`;
+        } else {
+          prompt = `Context: ${contextString}\n\nProvide Docker Desktop insights and recommendations based on this context.`;
+        }
+      } else {
+        prompt = `Analyze this data and provide Docker insights: ${JSON.stringify(data)}`;
+      }
     }
 
-        const selectedAgent = 'agent.yaml'; // Use the actual agent name from the API
+    const selectedAgent = 'agent.yaml'; // Use the actual agent name from the API
 
     // Step 1: Get or create a session (with caching for speed)
     let sessionId: string;
@@ -61,6 +73,7 @@ async function communicateWithAgent(data: any): Promise<any> {
 
     // Parse the SSE response to extract the content
     const sseData = response.data;
+    // const sseData = response.data;
     let fullResponse = '';
 
     // Extract content from SSE data lines
@@ -77,6 +90,7 @@ async function communicateWithAgent(data: any): Promise<any> {
         }
       }
     }
+    console.info('\n🔥 | http-server.ts:76 | fullResponse | 🔥\n', fullResponse);
 
     return {
       agentResponse: fullResponse.trim() || "Agent responded but no content was extracted",
@@ -95,9 +109,9 @@ async function communicateWithAgent(data: any): Promise<any> {
     }
 
     return {
-      agentResponse: `Error communicating with agent: ${errorMessage}`,
+      agentResponse: errorMessage,
       success: false
-    };
+    }
   }
 }
 
