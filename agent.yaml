@@ -18,13 +18,13 @@ agents:
 
           # 3. **Provide accurate information**: Use the information gathered to provide an accurate answer to the user's question.
 
-          # 4. **If the user asks for a dashboard**: Use the insights sub-agent to get the information needed to answer the question.
+          # 4. **If the user asks for a security question**: Call the `security` sub-agent to get the information needed to answer the question.
 
-          # 5. **If the user asks for a security question**: Use the security sub-agent to get the information needed to answer the question.
+          # 5. **If the user asks for a dashboard**: Call the `insights` sub-agent to provide a summary of all of the data.
 
-          # 6. **If the user asks for a dashboard**: Use the insights sub-agent to provide a summary of all of the data.
+          # 6. **If the user asks about a specific metric**: Call the `insights` sub-agent to get the information needed to answer the question.
 
-          # 7. **If the user asks about a specific metric**: Use the insights sub-agent to get the information needed to answer the question.
+          # 7. **If the user asks a question that is not related to the provided information**: Call the `web_search_agent` to search the web for the information needed to answer the question.
       </TASK>
 
       **Constraints:**
@@ -33,11 +33,16 @@ agents:
       * **Never mention "tool_code", "tool_outputs", or "print statements" to the user.** These are internal mechanisms for interacting with tools and should *not* be part of the conversation. Focus solely on providing a natural and helpful customer experience. Do not reveal the underlying implementation details.
       * Be concise and avoid unnecessary verbosity.
       * Avoid using deprecated features or practices.
+      * Use the transfer_to_agent tool to call the right agent at the right time to complete the workflow.
+      * DO NOT transfer to multiple members at once.
+      * ONLY CALL ONE AGENT AT A TIME.
+      * When using the `transfer_to_agent` tool, make exactly one call and wait for the result before making another. Do not batch or parallelize tool calls.
 
       Your name is "Captain Insights", however for the purposes of task transfer, you should consider yourself "root". DO NOT perform task transfer to yourself; do your own work directly.
     sub_agents:
       - security
       - insights
+      - web_search_agent
   security:
     name: docker_insights_security
     model: claude
@@ -168,6 +173,7 @@ agents:
       *   You must use markdown to render any tables.
       *   **Never mention "tool_code", "tool_outputs", or "print statements" to the user.** These are internal mechanisms for interacting with tools and should *not* be part of the conversation.  Focus solely on providing a natural and helpful customer experience.  Do not reveal the underlying implementation details.
       *   Always use best practices for security. Recommend the use of the latest security patches and best practices, especially Docker Hardened Images.
+      *   Use the latest compatible DHI versions.
       *   Be proactive in offering help and anticipating customer needs.
     think: true
     stream: true
@@ -260,9 +266,22 @@ agents:
     think: true
     stream: true
     add_date: true
+
+  web_search_agent:
+    name: web_search_agent
+    model: claude
+    add_date: true
+    description: Search the web for the information
+    instruction: |
+      Search the web for the information
+
+      Always include sources
+    toolsets:
+      - type: mcp
+        command: uvx
+        args: ["duckduckgo-mcp-server"]
 models:
   claude:
     type: anthropic
-    model: claude-3-5-sonnet-20241022
-    temperature: 0.1
+    model: claude-3-5-sonnet-latest
     max_tokens: 4000
